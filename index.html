@@ -367,6 +367,12 @@
                 if (hitReticle.visible) {
                     // Ursprung platzieren
                     coordSystem.position.setFromMatrixPosition(hitReticle.matrix);
+                    
+                    // NEU: Verschiebe das Koordinatensystem auf der Y-Achse nach oben, 
+                    // damit die negativen Y-Werte nicht im Boden/Tisch verschwinden.
+                    // 4 Einheiten (4 * UNIT_SIZE = 0.8 Meter) nach oben.
+                    coordSystem.position.y += 4 * UNIT_SIZE;
+
                     // Rotiere System, sodass Y nach oben zeigt und Z in Richtung Kamera
                     const euler = new THREE.Euler().setFromRotationMatrix(hitReticle.matrix);
                     coordSystem.rotation.y = euler.y; 
