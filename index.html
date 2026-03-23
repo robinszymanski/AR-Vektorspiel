@@ -27,6 +27,705 @@
             left: 0;
             width: 100vw;
             height: 100vh;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        /* Startbildschirm / Menü */
+        #menu-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            pointer-events: auto;
+        }
+
+        h1 { margin-bottom: 10px; text-align: center; }
+        p.subtitle { color: #ccc; margin-bottom: 40px; text-align: center; max-width: 80%; }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            border-radius: 8px;
+            margin: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .btn:active { transform: scale(0.95); }
+        .btn:hover { background-color: #0056b3; }
+        .btn:disabled { background-color: #555; color: #888; cursor: not-allowed; }
+
+        /* AR UI Leisten */
+        #top-bar {
+            background: var(--bg-glass);
+            padding: 15px;
+            text-align: center;
+            font-size: 1.2rem;
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
+            margin: 0 10px;
+            backdrop-filter: blur(5px);
+            display: none;
+        }
+
+        #bottom-bar {
+            background: var(--bg-glass);
+            padding: 20px;
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+            backdrop-filter: blur(5px);
+        }
+
+        /* Live Koordinaten Anzeige */
+        #current-coord-display {
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 1.4rem;
+            font-family: monospace;
+            border: 2px solid #fff;
+            display: none;
+            pointer-events: none;
+        }
+
+        /* Distanz Steuerung */
+        #distance-controls {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .dist-btn {
+            width: 50px;
+            height: 50px;
+            font-size: 1.5rem;
+            border-radius: 25px;
+            background: var(--primary);
+            color: white;
+            border: 2px solid #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+
+        .dist-label {
+            background: var(--bg-glass);
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        /* Eingabefelder Visualisierung */
+        .input-group {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .coord-input {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .coord-input input {
+            width: 50px;
+            height: 40px;
+            font-size: 1.2rem;
+            text-align: center;
+            border-radius: 8px;
+            border: 2px solid #555;
+            background: #222;
+            color: white;
+        }
+
+        .coord-input label { margin-bottom: 5px; font-weight: bold; }
+        .lbl-x { color: #ff4444; }
+        .lbl-y { color: #44ff44; }
+        .lbl-z { color: #4488ff; }
+
+        /* Status & Feedback */
+        #feedback-toast {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 200, 0, 0.9);
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: none;
+            text-align: center;
+        }
+        
+        #ar-button-container {
+            margin-top: 20px;
+        }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="menu-overlay">
+        <h1>3D Vektor-Geometrie</h1>
+        <p class="subtitle">Analytische Geometrie in Augmented Reality erkunden</p>
+        
+        <button class="btn interactive" id="btn-mode-vis">Visualisierung & Entdecken</button>
+        <button class="btn interactive" id="btn-mode-game">Vektor-Spiel</button>
+        
+        <div id="ar-button-container"></div>
+    </div>
+
+    <!-- AR User Interface (DOM Overlay) -->
+    <div id="ui-container">
+        <div id="top-bar" class="interactive">
+            <span id="instruction-text">Suche eine freie Fläche (Tisch/Boden)...</span>
+        </div>
+
+        <div id="current-coord-display">(0 | 0 | 0)</div>
+
+        <div id="distance-controls" class="interactive">
+            <button class="dist-btn interactive" id="btn-dist-plus">+</button>
+            <div class="dist-label">Distanz</div>
+            <button class="dist-btn interactive" id="btn-dist-minus">-</button>
+        </div>
+
+        <div id="feedback-toast">Richtig!</div>
+
+        <div id="bottom-bar" class="interactive">
+            <div id="ui-visualize" style="display: none; width: 100%;">
+                <div class="input-group">
+                    <div class="coord-input"><label class="lbl-x">X</label><input type="number" id="in-x" value="1" step="1"></div>
+                    <div class="coord-input"><label class="lbl-y">Y</label><input type="number" id="in-y" value="2" step="1"></div>
+                    <div class="coord-input"><label class="lbl-z">Z</label><input type="number" id="in-z" value="-1" step="1"></div>
+                </div>
+                <button class="btn" id="btn-add-vector" style="width: 100%; margin: 15px 0 0 0;">Vektor eintragen</button>
+                <p style="font-size: 0.9rem; text-align: center; margin-top: 10px; color: #aaa;">
+                    Tippe ins Leere, um einen Vektor zu platzieren.<br>Tippe auf den Startpunkt eines Vektors, um ihn zu verschieben.
+                </p>
+            </div>
+
+            <div id="ui-game" style="display: none; width: 100%; text-align: center;">
+                <h3 style="margin: 0 0 10px 0; color: #ffcc00;">Aufgabe:</h3>
+                <p id="game-task" style="font-size: 1.2rem; margin: 0 0 15px 0;">Spanne den Vektor v = (2|1|-1)<br>vom markierten Startpunkt auf.</p>
+                <p style="font-size: 0.9rem; color: #aaa;">
+                    1. Fadenkreuz auf die Kugel richten & tippen.<br>
+                    2. Fadenkreuz zum Zielpunkt bewegen & tippen.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+        // --- Globale Zustände ---
+        let currentMode = 'menu';
+        let appState = 'init';
+        const UNIT_SIZE = 0.2; 
+        let pointerDistance = 1.5; // Start-Entfernung des Cursors vom Smartphone
+
+        // --- DOM Elemente ---
+        const menuOverlay = document.getElementById('menu-overlay');
+        const topBar = document.getElementById('top-bar');
+        const bottomBar = document.getElementById('bottom-bar');
+        const instructionText = document.getElementById('instruction-text');
+        const uiVisualize = document.getElementById('ui-visualize');
+        const uiGame = document.getElementById('ui-game');
+        const arButtonContainer = document.getElementById('ar-button-container');
+        const feedbackToast = document.getElementById('feedback-toast');
+        const coordDisplay = document.getElementById('current-coord-display');
+        const distanceControls = document.getElementById('distance-controls');
+
+        // --- Three.js Basis-Setup ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+        light.position.set(0.5, 1, 0.25);
+        scene.add(light);
+
+        // --- WebXR & Hit Testing ---
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+        
+        const hitReticle = new THREE.Mesh(
+            new THREE.RingGeometry(0.05, 0.06, 32).rotateX(-Math.PI / 2),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        hitReticle.matrixAutoUpdate = false;
+        hitReticle.visible = false;
+        scene.add(hitReticle);
+
+        // --- Das mathematische Koordinatensystem ---
+        const coordSystem = new THREE.Group();
+        coordSystem.scale.set(UNIT_SIZE, UNIT_SIZE, UNIT_SIZE);
+        coordSystem.visible = false;
+        scene.add(coordSystem);
+
+        // Dickere Achsen mit "Kästchen" für jeden Wert
+        const axesGroup = new THREE.Group();
+        
+        function buildCustomAxis(colorHex, rotationEuler) {
+            const axisRoot = new THREE.Group();
+            
+            // Hauptlinie (dickerer Zylinder)
+            const material = new THREE.MeshBasicMaterial({ color: colorHex });
+            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 10, 8), material);
+            // Three.js Zylinder ist standardmäßig auf der Y-Achse
+            axisRoot.add(cylinder);
+
+            // Kästchen an jedem Integer-Wert von -5 bis +5
+            for(let i = -5; i <= 5; i++) {
+                if (i === 0) continue; // Den Nullpunkt überspringen
+                const boxGeom = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+                const boxMesh = new THREE.Mesh(boxGeom, material);
+                boxMesh.position.y = i;
+                axisRoot.add(boxMesh);
+            }
+
+            axisRoot.rotation.copy(rotationEuler);
+            return axisRoot;
+        }
+
+        // X-Achse (Rot)
+        axesGroup.add(buildCustomAxis(0xff4444, new THREE.Euler(0, 0, -Math.PI/2)));
+        // Y-Achse (Grün)
+        axesGroup.add(buildCustomAxis(0x44ff44, new THREE.Euler(0, 0, 0)));
+        // Z-Achse (Blau)
+        axesGroup.add(buildCustomAxis(0x4488ff, new THREE.Euler(Math.PI/2, 0, 0)));
+        
+        coordSystem.add(axesGroup);
+
+        // Raster Boden
+        const gridHelper = new THREE.GridHelper(10, 10, 0x888888, 0x444444);
+        coordSystem.add(gridHelper);
+
+        // --- Der 3D Cursor ---
+        const cameraPointer = new THREE.Object3D();
+        cameraPointer.position.set(0, 0, -pointerDistance); 
+        camera.add(cameraPointer);
+        scene.add(camera);
+
+        const snapCursor = new THREE.Mesh(
+            new THREE.BoxGeometry(0.35, 0.35, 0.35), // Jetzt als Kästchen für besseres Zielen
+            new THREE.MeshBasicMaterial({ color: 0xffcc00, wireframe: true, transparent: true, opacity: 0.8 })
+        );
+        snapCursor.visible = false;
+        coordSystem.add(snapCursor);
+
+        // Laser Pointer Linie (Verbindet Smartphone mit dem eingerasteten Punkt)
+        const laserMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+        const laserGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0)]);
+        const laserLine = new THREE.Line(laserGeom, laserMat);
+        laserLine.visible = false;
+        coordSystem.add(laserLine);
+
+        // --- Logik Variablen ---
+        let vectors = []; 
+        let selectedVector = null; 
+        let snappedMathPos = new THREE.Vector3(); 
+
+        let gameTargetVector = new THREE.Vector3();
+        let gameStartPoint = new THREE.Vector3();
+        let gameState = 'find_start';
+        let gameStartSphere = null;
+        let gameTempLine = null;
+
+        // --- UI Events ---
+        document.getElementById('btn-mode-vis').addEventListener('click', () => setupARButton('visualize'));
+        document.getElementById('btn-mode-game').addEventListener('click', () => setupARButton('game'));
+
+        document.getElementById('btn-add-vector').addEventListener('click', () => {
+            const x = parseFloat(document.getElementById('in-x').value);
+            const y = parseFloat(document.getElementById('in-y').value);
+            const z = parseFloat(document.getElementById('in-z').value);
+            if (isNaN(x) || isNaN(y) || isNaN(z)) return;
+            createVector(snappedMathPos.clone(), new THREE.Vector3(x, y, z));
+        });
+
+        // Distanz-Steuerung Events
+        document.getElementById('btn-dist-plus').addEventListener('click', () => {
+            pointerDistance = Math.min(3.5, pointerDistance + 0.5);
+            cameraPointer.position.set(0, 0, -pointerDistance);
+        });
+
+        document.getElementById('btn-dist-minus').addEventListener('click', () => {
+            pointerDistance = Math.max(0.5, pointerDistance - 0.5);
+            cameraPointer.position.set(0, 0, -pointerDistance);
+        });
+
+        function setupARButton(mode) {
+            currentMode = mode;
+            document.getElementById('btn-mode-vis').style.display = 'none';
+            document.getElementById('btn-mode-game').style.display = 'none';
+            
+            const arButton = ARButton.createButton(renderer, {
+                requiredFeatures: ['hit-test'],
+                optionalFeatures: ['dom-overlay'],
+                domOverlay: { root: document.getElementById('ui-container') }
+            });
+            arButton.classList.add('btn');
+            arButton.style.position = 'static';
+            arButtonContainer.appendChild(arButton);
+        }
+
+        // --- XR Session Handling ---
+        renderer.xr.addEventListener('sessionstart', () => {
+            menuOverlay.style.display = 'none';
+            topBar.style.display = 'block';
+            appState = 'place_origin';
+            instructionText.innerText = "Bewege das Gerät. Tippe auf eine Fläche, um das Koordinatensystem zu platzieren.";
+            
+            if (currentMode === 'game') {
+                initNewGameRound();
+            }
+        });
+
+        renderer.xr.addEventListener('sessionend', () => {
+            menuOverlay.style.display = 'flex';
+            topBar.style.display = 'none';
+            bottomBar.style.display = 'none';
+            coordDisplay.style.display = 'none';
+            distanceControls.style.display = 'none';
+            document.getElementById('btn-mode-vis').style.display = 'block';
+            document.getElementById('btn-mode-game').style.display = 'block';
+            arButtonContainer.innerHTML = '';
+            
+            appState = 'init';
+            coordSystem.visible = false;
+            hitReticle.visible = false;
+            snapCursor.visible = false;
+            laserLine.visible = false;
+            vectors.forEach(v => coordSystem.remove(v.group));
+            vectors = [];
+            if(gameStartSphere) coordSystem.remove(gameStartSphere);
+            if(gameTempLine) coordSystem.remove(gameTempLine);
+        });
+
+        const controller = renderer.xr.getController(0);
+        controller.addEventListener('select', onSelect);
+        scene.add(controller);
+
+        function onSelect() {
+            if (appState === 'place_origin') {
+                if (hitReticle.visible) {
+                    coordSystem.position.setFromMatrixPosition(hitReticle.matrix);
+                    // Verschiebe das System auf der Y-Achse nach oben
+                    coordSystem.position.y += 4 * UNIT_SIZE;
+
+                    const euler = new THREE.Euler().setFromRotationMatrix(hitReticle.matrix);
+                    coordSystem.rotation.y = euler.y; 
+                    
+                    coordSystem.visible = true;
+                    hitReticle.visible = false;
+                    snapCursor.visible = true;
+                    laserLine.visible = true;
+                    
+                    appState = 'active';
+                    bottomBar.style.display = 'flex';
+                    coordDisplay.style.display = 'block';
+                    distanceControls.style.display = 'flex';
+                    
+                    if (currentMode === 'visualize') {
+                        uiVisualize.style.display = 'block';
+                        uiGame.style.display = 'none';
+                        instructionText.innerText = "Modus: Visualisierung";
+                    } else {
+                        uiVisualize.style.display = 'none';
+                        uiGame.style.display = 'block';
+                        instructionText.innerText = "Modus: Vektor-Spiel";
+                    }
+                }
+            } 
+            else if (appState === 'active') {
+                if (currentMode === 'visualize') {
+                    handleVisualizeClick();
+                } else if (currentMode === 'game') {
+                    handleGameClick();
+                }
+            }
+        }
+
+        function handleVisualizeClick() {
+            if (selectedVector) {
+                selectedVector.startPoint.copy(snappedMathPos);
+                updateVectorVisuals(selectedVector);
+                selectedVector.startSphere.material.color.setHex(0xaaaaaa);
+                selectedVector = null;
+                instructionText.innerText = "Vektor platziert.";
+            } else {
+                let found = false;
+                for (let v of vectors) {
+                    if (v.startPoint.distanceTo(snappedMathPos) < 0.8) {
+                        selectedVector = v;
+                        v.startSphere.material.color.setHex(0xff0000);
+                        instructionText.innerText = "Vektor aufgenommen. Tippe zum Ablegen.";
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        function createVector(start, dir) {
+            const group = new THREE.Group();
+            
+            const sphereGeom = new THREE.SphereGeometry(0.2, 16, 16);
+            const sphereMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+            const startSphere = new THREE.Mesh(sphereGeom, sphereMat);
+            group.add(startSphere);
+
+            const length = dir.length();
+            const hex = 0xffffff * Math.random();
+            const arrow = new THREE.ArrowHelper(dir.clone().normalize(), new THREE.Vector3(0,0,0), length, hex, 0.4, 0.3);
+            group.add(arrow);
+
+            coordSystem.add(group);
+
+            const vectorData = { group, startSphere, arrow, startPoint: start, dirLocal: dir };
+            updateVectorVisuals(vectorData);
+            vectors.push(vectorData);
+        }
+
+        function updateVectorVisuals(vData) {
+            vData.group.position.copy(vData.startPoint);
+        }
+
+        function initNewGameRound() {
+            do {
+                gameTargetVector.set(
+                    Math.floor(Math.random() * 7) - 3,
+                    Math.floor(Math.random() * 7) - 3,
+                    Math.floor(Math.random() * 7) - 3
+                );
+            } while (gameTargetVector.lengthSq() === 0);
+
+            gameStartPoint.set(
+                Math.floor(Math.random() * 5) - 2,
+                0, 
+                Math.floor(Math.random() * 5) - 2
+            );
+
+            document.getElementById('game-task').innerHTML = 
+                `Spanne den Vektor <br><b>v = (${gameTargetVector.x} | ${gameTargetVector.y} | ${gameTargetVector.z})</b><br>vom markierten Startpunkt auf.`;
+
+            if (!gameStartSphere) {
+                gameStartSphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.3, 16, 16),
+                    new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true })
+                );
+                coordSystem.add(gameStartSphere);
+            }
+            gameStartSphere.position.copy(gameStartPoint);
+            
+            if (gameTempLine) {
+                coordSystem.remove(gameTempLine);
+                gameTempLine = null;
+            }
+
+            gameState = 'find_start';
+            instructionText.innerText = "Tippe auf die grüne Startkugel.";
+        }
+
+        function handleGameClick() {
+            if (gameState === 'find_start') {
+                if (snappedMathPos.distanceTo(gameStartPoint) < 1.0) {
+                    gameState = 'drawing';
+                    instructionText.innerText = "Bewege das Gerät zum Endpunkt und tippe.";
+                    
+                    gameTempLine = new THREE.ArrowHelper(
+                        new THREE.Vector3(1,0,0), gameStartPoint, 0.1, 0xffff00, 0.4, 0.3
+                    );
+                    coordSystem.add(gameTempLine);
+                } else {
+                    showFeedback("Zu weit vom Startpunkt entfernt!", "#ff4444");
+                }
+            } else if (gameState === 'drawing') {
+                const drawnVector = new THREE.Vector3().subVectors(snappedMathPos, gameStartPoint);
+                
+                if (drawnVector.equals(gameTargetVector)) {
+                    showFeedback("Richtig! Super!", "#00cc00");
+                    gameState = 'done';
+                    setTimeout(initNewGameRound, 2500);
+                } else {
+                    showFeedback(`Falsch. Du hast (${drawnVector.x}|${drawnVector.y}|${drawnVector.z}) gezeichnet.`, "#ff4444");
+                    coordSystem.remove(gameTempLine);
+                    gameTempLine = null;
+                    gameState = 'find_start';
+                    instructionText.innerText = "Versuche es nochmal. Tippe auf die Startkugel.";
+                }
+            }
+        }
+
+        function showFeedback(msg, color) {
+            feedbackToast.innerText = msg;
+            feedbackToast.style.background = color;
+            feedbackToast.style.display = 'block';
+            setTimeout(() => { feedbackToast.style.display = 'none'; }, 2500);
+        }
+
+        // --- Render Loop ---
+        renderer.setAnimationLoop((timestamp, frame) => {
+            if (frame) {
+                const session = renderer.xr.getSession();
+
+                // 1. Hit Testing
+                if (appState === 'place_origin') {
+                    if (!hitTestSourceRequested) {
+                        session.requestReferenceSpace('viewer').then((referenceSpace) => {
+                            session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                                hitTestSource = source;
+                            });
+                        });
+                        session.addEventListener('end', () => {
+                            hitTestSourceRequested = false;
+                            hitTestSource = null;
+                        });
+                        hitTestSourceRequested = true;
+                    }
+
+                    if (hitTestSource) {
+                        const referenceSpace = renderer.xr.getReferenceSpace();
+                        const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+                        if (hitTestResults.length > 0) {
+                            const hit = hitTestResults[0];
+                            hitReticle.visible = true;
+                            hitReticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
+                        } else {
+                            hitReticle.visible = false;
+                        }
+                    }
+                }
+
+                // 2. Cursor Steuerung & UI Updates
+                if (appState === 'active') {
+                    const pointerWorldPos = new THREE.Vector3();
+                    cameraPointer.getWorldPosition(pointerWorldPos);
+
+                    const localPos = coordSystem.worldToLocal(pointerWorldPos.clone());
+
+                    snappedMathPos.set(
+                        Math.round(localPos.x),
+                        Math.round(localPos.y),
+                        Math.round(localPos.z)
+                    );
+
+                    snapCursor.position.lerp(snappedMathPos, 0.3);
+
+                    // Aktualisiere Text Anzeige
+                    coordDisplay.innerText = `(${snappedMathPos.x} | ${snappedMathPos.y} | ${snappedMathPos.z})`;
+
+                    // Aktualisiere Laser-Linie vom Handy zum Punkt
+                    const camWorldPos = new THREE.Vector3();
+                    camera.getWorldPosition(camWorldPos);
+                    const camLocalPos = coordSystem.worldToLocal(camWorldPos);
+                    laserLine.geometry.setFromPoints([camLocalPos, snapCursor.position]);
+
+                    if (currentMode === 'visualize' && selectedVector) {
+                        selectedVector.startPoint.copy(snappedMathPos);
+                        updateVectorVisuals(selectedVector);
+                    }
+
+                    if (currentMode === 'game' && gameState === 'drawing' && gameTempLine) {
+                        const dir = new THREE.Vector3().subVectors(snappedMathPos, gameStartPoint);
+                        const len = dir.length();
+                        if (len > 0.1) {
+                            gameTempLine.setDirection(dir.normalize());
+                            gameTempLine.setLength(len, 0.4, 0.3);
+                        }
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WebXR Vektor-Geometrie</title>
+    <style>
+        :root {
+            --primary: #007bff;
+            --bg-glass: rgba(20, 20, 20, 0.8);
+            --text: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #000;
+            color: var(--text);
+        }
+
+        /* UI Container für das DOM Overlay */
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             pointer-events: none; /* Klicks durchlassen, wo kein UI ist */
             display: flex;
             flex-direction: column;
