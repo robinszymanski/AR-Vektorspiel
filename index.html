@@ -124,28 +124,40 @@
             flex-direction: column;
             gap: 10px;
             align-items: center;
+            background: var(--bg-glass);
+            padding: 15px 10px;
+            border-radius: 20px;
+            backdrop-filter: blur(5px);
         }
 
-        .dist-btn {
-            width: 50px;
-            height: 50px;
-            font-size: 1.5rem;
-            border-radius: 25px;
+        #dist-slider {
+            -webkit-appearance: slider-vertical;
+            appearance: slider-vertical;
+            width: 8px;
+            height: 150px;
+            background: #444;
+            outline: none;
+            border-radius: 5px;
+        }
+
+        #dist-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
             background: var(--primary);
-            color: white;
+            cursor: pointer;
             border: 2px solid #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
         }
 
         .dist-label {
-            background: var(--bg-glass);
-            padding: 5px 10px;
-            border-radius: 10px;
+            background: transparent;
+            padding: 0;
+            border-radius: 0;
             font-size: 0.9rem;
             text-align: center;
+            color: #ccc;
         }
 
         /* Eingabefelder Visualisierung */
@@ -234,9 +246,9 @@
         <div id="current-coord-display">(0 | 0 | 0)</div>
 
         <div id="distance-controls" class="interactive">
-            <button class="dist-btn interactive" id="btn-dist-plus">+</button>
-            <div class="dist-label">Distanz</div>
-            <button class="dist-btn interactive" id="btn-dist-minus">-</button>
+            <div class="dist-label" style="font-size: 0.8rem; margin-bottom: 5px;">Nah</div>
+            <input type="range" id="dist-slider" class="interactive" min="0.5" max="4.0" step="0.1" value="1.5" orient="vertical">
+            <div class="dist-label" style="font-size: 0.8rem; margin-top: 5px;">Fern</div>
         </div>
 
         <div id="feedback-toast">Richtig!</div>
@@ -370,10 +382,27 @@
         camera.add(cameraPointer);
         scene.add(camera);
 
-        const snapCursor = new THREE.Mesh(
-            new THREE.BoxGeometry(0.35, 0.35, 0.35), // Jetzt als Kästchen für besseres Zielen
-            new THREE.MeshBasicMaterial({ color: 0xffcc00, wireframe: true, transparent: true, opacity: 0.8 })
-        );
+        // Neuer, übersichtlicherer Cursor (3D-Fadenkreuz)
+        const snapCursor = new THREE.Group();
+        const cursorMat = new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.9 });
+        
+        // Zentraler Punkt
+        const centerDot = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), cursorMat);
+        snapCursor.add(centerDot);
+        
+        // Achsen des Fadenkreuzes (kleine Linien)
+        const crossHairGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8);
+        const crossX = new THREE.Mesh(crossHairGeo, cursorMat);
+        crossX.rotation.z = Math.PI / 2;
+        snapCursor.add(crossX);
+        
+        const crossY = new THREE.Mesh(crossHairGeo, cursorMat);
+        snapCursor.add(crossY);
+        
+        const crossZ = new THREE.Mesh(crossHairGeo, cursorMat);
+        crossZ.rotation.x = Math.PI / 2;
+        snapCursor.add(crossZ);
+
         snapCursor.visible = false;
         coordSystem.add(snapCursor);
 
@@ -407,14 +436,10 @@
             createVector(snappedMathPos.clone(), new THREE.Vector3(x, y, z));
         });
 
-        // Distanz-Steuerung Events
-        document.getElementById('btn-dist-plus').addEventListener('click', () => {
-            pointerDistance = Math.min(3.5, pointerDistance + 0.5);
-            cameraPointer.position.set(0, 0, -pointerDistance);
-        });
-
-        document.getElementById('btn-dist-minus').addEventListener('click', () => {
-            pointerDistance = Math.max(0.5, pointerDistance - 0.5);
+        // Distanz-Steuerung Events via Slider
+        const distSlider = document.getElementById('dist-slider');
+        distSlider.addEventListener('input', (e) => {
+            pointerDistance = parseFloat(e.target.value);
             cameraPointer.position.set(0, 0, -pointerDistance);
         });
 
@@ -566,11 +591,9 @@
                 );
             } while (gameTargetVector.lengthSq() === 0);
 
-            gameStartPoint.set(
-                Math.floor(Math.random() * 5) - 2,
-                0, 
-                Math.floor(Math.random() * 5) - 2
-            );
+            // Startpunkt fix auf den Ursprung (0,0,0) setzen. 
+            // Das erleichtert das Finden am Anfang enorm (Andockung an die Achsen).
+            gameStartPoint.set(0, 0, 0);
 
             document.getElementById('game-task').innerHTML = 
                 `Spanne den Vektor <br><b>v = (${gameTargetVector.x} | ${gameTargetVector.y} | ${gameTargetVector.z})</b><br>vom markierten Startpunkt auf.`;
