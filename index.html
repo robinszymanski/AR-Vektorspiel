@@ -19,7 +19,7 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            pointer-events: none; /* Let touches pass through to AR button when needed */
+            pointer-events: none;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -94,13 +94,11 @@
         #btn-action.btn-green { background-color: #28a745; }
         #btn-action.btn-red { background-color: #dc3545; }
 
-        /* Hide UI initially until AR starts */
         .ar-only {
             display: none;
         }
         
         :xr-overlay {
-            /* WebXR DOM overlay pseudo-class */
             display: block;
         }
 
@@ -131,7 +129,7 @@
 
     <div id="ui-container">
         <div id="task-panel" class="panel ar-only">
-            <div class="title">Aktuelle Aufgabe</div>
+            <div class="title" id="task-title">Aktuelle Aufgabe</div>
             <div class="task-text" id="task-display">Wird geladen...</div>
             <div class="hint" id="status-hint">Bewege dich, um den Startpunkt P zu finden.</div>
         </div>
@@ -157,21 +155,23 @@
         let coordSystemPlaced = false;
         
         // Spielzustand
-        let state = 'FIND_START'; // FIND_START, DRAWING, EVALUATION
+        let state = 'PLACE_SYSTEM'; // PLACE_SYSTEM, FIND_START, DRAWING, EVALUATION
         let targetP = new THREE.Vector3();
         let targetV = new THREE.Vector3();
         let userStart = new THREE.Vector3();
         let userEnd = new THREE.Vector3();
 
         // 3D Objekte für die Interaktion
-        let cursorWorld; // Der kleine Punkt, der am Handy klebt
-        let snappedLocalPos = new THREE.Vector3(); // Die aktuell eingerastete Koordinate
+        let cursorWorld; 
+        let targetPointMesh; // Visueller Punkt für den Startpunkt P
+        let snappedLocalPos = new THREE.Vector3(); 
         let isSnapped = false;
         
-        let dynamicLine, dynamicArrow; // Der aktuell gezeichnete Vektor
-        let correctLine, correctArrow; // Der Lösungsvektor (falls falsch)
+        let dynamicLine, dynamicArrow; 
+        let correctLine, correctArrow; 
 
         // UI Elemente
+        const taskTitle = document.getElementById('task-title');
         const taskDisplay = document.getElementById('task-display');
         const statusHint = document.getElementById('status-hint');
         const btnAction = document.getElementById('btn-action');
@@ -199,18 +199,31 @@
             renderer.xr.enabled = true;
             container.appendChild(renderer.domElement);
 
-            // AR Button mit DOM Overlay (damit unsere HTML UI in AR sichtbar ist)
             const arOptions = {
                 requiredFeatures: ['dom-overlay'],
                 domOverlay: { root: document.getElementById('ui-container') }
             };
             document.body.appendChild(ARButton.createButton(renderer, arOptions));
 
-            // Wenn AR startet, blenden wir die UI ein und setzen das System zurück
+            // Wenn AR startet
             renderer.xr.addEventListener('sessionstart', () => {
                 document.querySelectorAll('.ar-only').forEach(el => el.style.display = 'block');
+                
+                // Setze auf Platzierungsmodus zurück
                 coordSystemPlaced = false; 
-                generateTask();
+                state = 'PLACE_SYSTEM';
+                
+                taskTitle.textContent = "Schritt 1";
+                taskDisplay.innerHTML = "System platzieren";
+                statusHint.textContent = "Schau auf eine freie Fläche. Wenn das Koordinatensystem gut schwebt, drücke Platzieren.";
+                
+                btnAction.textContent = "Hier platzieren";
+                btnAction.className = "";
+                btnAction.disabled = false;
+
+                coordSystem.visible = true; // Zeige es zur Platzierungsvorschau an
+                cursorWorld.visible = false; // Cursor erst nach Platzierung zeigen
+                targetPointMesh.visible = false;
             });
 
             renderer.xr.addEventListener('sessionend', () => {
@@ -263,7 +276,7 @@
             coordSystem.add(new THREE.Line(yAxisGeo, yAxisMat));
             coordSystem.add(makeTextSprite("Y", "#44ff44")).position.set(0, GRID_SIZE + 0.3, 0);
 
-            // Z-Achse (Blau) - Z geht in Three.js nach hinten, wir beschriften entsprechend
+            // Z-Achse (Blau)
             const zAxisMat = new THREE.LineBasicMaterial({ color: 0x4444ff, linewidth: 3 });
             const zAxisGeo = new THREE.BufferGeometry().setFromPoints([
                 new THREE.Vector3(0, 0, -GRID_SIZE), new THREE.Vector3(0, 0, GRID_SIZE)
@@ -271,12 +284,11 @@
             coordSystem.add(new THREE.Line(zAxisGeo, zAxisMat));
             coordSystem.add(makeTextSprite("Z", "#4444ff")).position.set(0, 0, GRID_SIZE + 0.3);
 
-            // Gitterstriche (Ticks) & Zahlen
             const tickMat = new THREE.LineBasicMaterial({ color: 0xffffff });
             const tickSize = 0.1;
 
             for (let i = -GRID_SIZE; i <= GRID_SIZE; i++) {
-                if (i === 0) continue; // Ursprung überspringen
+                if (i === 0) continue; 
 
                 // X-Ticks
                 const xTickGeo = new THREE.BufferGeometry().setFromPoints([
@@ -312,10 +324,9 @@
                 }
             }
 
-            // Gesamtskalierung anwenden
             coordSystem.scale.set(UNIT_SCALE, UNIT_SCALE, UNIT_SCALE);
             scene.add(coordSystem);
-            coordSystem.visible = false; // Unsichtbar bis AR positioniert ist
+            coordSystem.visible = false; 
         }
 
         function setupInteractionObjects() {
@@ -323,8 +334,16 @@
             const cursorGeo = new THREE.SphereGeometry(0.015, 16, 16);
             const cursorMat = new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false });
             cursorWorld = new THREE.Mesh(cursorGeo, cursorMat);
-            cursorWorld.renderOrder = 999; // Immer vorne
+            cursorWorld.renderOrder = 999;
             scene.add(cursorWorld);
+            cursorWorld.visible = false;
+
+            // Startpunkt Ziel (blaue Kugel)
+            const targetPointGeo = new THREE.SphereGeometry(0.03, 16, 16);
+            const targetPointMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: false });
+            targetPointMesh = new THREE.Mesh(targetPointGeo, targetPointMat);
+            scene.add(targetPointMesh);
+            targetPointMesh.visible = false;
 
             // Materialien für Vektoren
             const drawingMat = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 5 });
@@ -346,12 +365,10 @@
         }
 
         function generateTask() {
-            // Zufällige Werte generieren (-3 bis +3)
             function rand() { return Math.floor(Math.random() * 7) - 3; }
             
             targetP.set(rand(), rand(), rand());
             
-            // Sicherstellen, dass der Vektor nicht 0,0,0 ist und im Grid bleibt
             do {
                 targetV.set(rand(), rand(), rand());
             } while (targetV.lengthSq() === 0 || 
@@ -359,6 +376,12 @@
                      Math.abs(targetP.y + targetV.y) > GRID_SIZE ||
                      Math.abs(targetP.z + targetV.z) > GRID_SIZE);
 
+            // Setze die blaue Kugel (Startpunkt) an die richtige Welt-Position
+            const worldTargetP = targetP.clone().multiplyScalar(UNIT_SCALE).applyMatrix4(coordSystem.matrixWorld);
+            targetPointMesh.position.copy(worldTargetP);
+            targetPointMesh.visible = true;
+
+            taskTitle.textContent = "Aktuelle Aufgabe";
             taskDisplay.innerHTML = `P(${targetP.x} | ${targetP.y} | ${targetP.z}) &nbsp;&nbsp;&nbsp; v = <br>(${targetV.x} | ${targetV.y} | ${targetV.z})<sup>T</sup>`;
             
             resetDrawing();
@@ -369,7 +392,7 @@
             btnAction.textContent = "Startpunkt setzen";
             btnAction.className = "";
             btnAction.disabled = true;
-            statusHint.textContent = "Bewege das Handy zum Startpunkt P. Der Cursor rastet ein.";
+            statusHint.textContent = "Bewege das Handy zur blauen Kugel (Startpunkt P).";
             
             dynamicLine.visible = false;
             dynamicArrow.visible = false;
@@ -378,7 +401,12 @@
         }
 
         function handleActionClick() {
-            if (state === 'FIND_START') {
+            if (state === 'PLACE_SYSTEM') {
+                coordSystemPlaced = true;
+                cursorWorld.visible = true; // Cursor einblenden
+                generateTask(); // Erstes Level generieren
+
+            } else if (state === 'FIND_START') {
                 if (!isSnapped) return;
                 
                 userStart.copy(snappedLocalPos);
@@ -410,7 +438,6 @@
             const isVectorCorrect = userVector.equals(targetV);
 
             if (isStartCorrect && isVectorCorrect) {
-                // Alles Richtig
                 statusHint.textContent = "Ausgezeichnet! Vektor korrekt eingezeichnet.";
                 btnAction.textContent = "Nächste Aufgabe";
                 btnAction.className = "btn-green";
@@ -418,7 +445,6 @@
                 dynamicLine.material.color.setHex(0x00ff00);
                 dynamicArrow.material.color.setHex(0x00ff00);
             } else {
-                // Falsch
                 let errorMsg = "Leider falsch. ";
                 if (!isStartCorrect) errorMsg += `Falscher Startpunkt (Du hast ${userStart.x},${userStart.y},${userStart.z} gewählt). `;
                 if (!isVectorCorrect) errorMsg += `Falsche Richtung/Länge.`;
@@ -430,7 +456,6 @@
                 dynamicLine.material.color.setHex(0xff0000);
                 dynamicArrow.material.color.setHex(0xff0000);
 
-                // Zeige korrekten Vektor an
                 drawVector(targetP, new THREE.Vector3().addVectors(targetP, targetV), correctLine, correctArrow);
                 correctLine.visible = true;
                 correctArrow.visible = true;
@@ -439,22 +464,17 @@
         }
 
         function drawVector(startLocal, endLocal, lineObj, arrowObj) {
-            // Umrechnung von lokalen Gitter-Koordinaten in Weltkoordinaten
             const startWorld = startLocal.clone().multiplyScalar(UNIT_SCALE).applyMatrix4(coordSystem.matrixWorld);
             const endWorld = endLocal.clone().multiplyScalar(UNIT_SCALE).applyMatrix4(coordSystem.matrixWorld);
 
-            // Linie aktualisieren
             lineObj.geometry.setFromPoints([startWorld, endWorld]);
             
-            // Pfeilspitze ausrichten und positionieren
             const direction = new THREE.Vector3().subVectors(endWorld, startWorld);
             const length = direction.length();
             
             if (length > 0) {
                 direction.normalize();
                 arrowObj.position.copy(endWorld);
-                // Der Cone zeigt im lokalen Koordinatensystem nach oben (+Y).
-                // Wir müssen ihn in die Vektor-Richtung drehen.
                 const axis = new THREE.Vector3(0, 1, 0);
                 arrowObj.quaternion.setFromUnitVectors(axis, direction);
             }
@@ -473,68 +493,57 @@
         function render() {
             if (renderer.xr.isPresenting) {
                 
-                // 1. Koordinatensystem beim ersten Frame vor dem Nutzer platzieren
+                // 1. Koordinatensystem schwebt vor dem Nutzer, bis es platziert wird
                 if (!coordSystemPlaced) {
                     const dir = new THREE.Vector3();
                     camera.getWorldDirection(dir);
-                    dir.y = 0; // Horizontal bleiben
+                    dir.y = 0; 
                     dir.normalize();
                     
-                    // 1.2m vor dem Nutzer, 0.4m unter Augenhöhe
                     const pos = camera.position.clone().add(dir.multiplyScalar(1.2));
                     pos.y -= 0.4;
                     
                     coordSystem.position.copy(pos);
-                    // Rotiere es so, dass die Z-Achse vom Nutzer weg zeigt und X nach rechts
-                    // Da in ThreeJS -Z "vorne" ist, drehen wir das System eventuell
-                    // Ein Standard-Math-System: X rechts, Y oben, Z auf uns zu. 
                     coordSystem.lookAt(coordSystem.position.clone().add(new THREE.Vector3(0,0,1))); 
                     coordSystem.updateMatrixWorld(true);
-                    coordSystem.visible = true;
-                    coordSystemPlaced = true;
-                }
+                } else {
+                    // 2. Kamera/Handy Position ermitteln für die Interaktion
+                    const camDir = new THREE.Vector3();
+                    camera.getWorldDirection(camDir);
+                    const rawCursorPos = camera.position.clone().add(camDir.multiplyScalar(0.2));
 
-                // 2. Kamera/Handy Position ermitteln (wir setzen den Cursor 20cm vor die Linse)
-                const camDir = new THREE.Vector3();
-                camera.getWorldDirection(camDir);
-                const rawCursorPos = camera.position.clone().add(camDir.multiplyScalar(0.2));
-
-                // 3. Snapping-Logik (Einrasten auf ganzzahlige Koordinaten)
-                if (coordSystem.visible) {
-                    // Wandle Welt-Position in lokales Gitter-System um
-                    const localPos = coordSystem.worldToLocal(rawCursorPos.clone()).divideScalar(UNIT_SCALE);
-                    
-                    // Nächste Ganzzahl berechnen
-                    const roundedPos = new THREE.Vector3(
-                        Math.round(localPos.x),
-                        Math.round(localPos.y),
-                        Math.round(localPos.z)
-                    );
-
-                    // Distanz im lokalen Gitter (Toleranz z.B. 0.4 Einheiten)
-                    if (localPos.distanceTo(roundedPos) < 0.4) {
-                        isSnapped = true;
-                        snappedLocalPos.copy(roundedPos);
-                        // Visueller Cursor auf eingerastete Weltkoordinate setzen
-                        const snappedWorld = roundedPos.clone().multiplyScalar(UNIT_SCALE).applyMatrix4(coordSystem.matrixWorld);
-                        cursorWorld.position.copy(snappedWorld);
-                        cursorWorld.material.color.setHex(0x00ff00); // Grün wenn eingerastet
-                        cursorWorld.scale.set(1.5, 1.5, 1.5);
+                    // 3. Snapping-Logik (Einrasten)
+                    if (coordSystem.visible) {
+                        const localPos = coordSystem.worldToLocal(rawCursorPos.clone()).divideScalar(UNIT_SCALE);
                         
-                        // Button aktivieren, falls im passenden State
-                        if (state !== 'EVALUATION') btnAction.disabled = false;
-                    } else {
-                        isSnapped = false;
-                        cursorWorld.position.copy(rawCursorPos);
-                        cursorWorld.material.color.setHex(0xffff00); // Gelb wenn frei
-                        cursorWorld.scale.set(1, 1, 1);
-                        
-                        if (state !== 'EVALUATION') btnAction.disabled = true;
-                    }
+                        const roundedPos = new THREE.Vector3(
+                            Math.round(localPos.x),
+                            Math.round(localPos.y),
+                            Math.round(localPos.z)
+                        );
 
-                    // 4. Dynamisches Zeichnen während der Auswahl des Endpunktes
-                    if (state === 'DRAWING') {
-                        drawVector(userStart, isSnapped ? snappedLocalPos : localPos, dynamicLine, dynamicArrow);
+                        if (localPos.distanceTo(roundedPos) < 0.4) {
+                            isSnapped = true;
+                            snappedLocalPos.copy(roundedPos);
+                            const snappedWorld = roundedPos.clone().multiplyScalar(UNIT_SCALE).applyMatrix4(coordSystem.matrixWorld);
+                            cursorWorld.position.copy(snappedWorld);
+                            cursorWorld.material.color.setHex(0x00ff00); 
+                            cursorWorld.scale.set(1.5, 1.5, 1.5);
+                            
+                            if (state !== 'EVALUATION') btnAction.disabled = false;
+                        } else {
+                            isSnapped = false;
+                            cursorWorld.position.copy(rawCursorPos);
+                            cursorWorld.material.color.setHex(0xffff00); 
+                            cursorWorld.scale.set(1, 1, 1);
+                            
+                            if (state !== 'EVALUATION') btnAction.disabled = true;
+                        }
+
+                        // 4. Dynamisches Zeichnen
+                        if (state === 'DRAWING') {
+                            drawVector(userStart, isSnapped ? snappedLocalPos : localPos, dynamicLine, dynamicArrow);
+                        }
                     }
                 }
             }
